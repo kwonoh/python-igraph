@@ -8305,6 +8305,53 @@ PyObject *igraphmodule_Graph_canonical_permutation(
   return list;
 }
 
+/**
+ * \ingroup python_interface_graph
+ * \brief Calculates the automorphism group of a graph using BLISS
+ * \sa igraph_automorphism_group
+ */
+PyObject *igraphmodule_Graph_automorphism_group(
+	igraphmodule_GraphObject *self, PyObject *args, PyObject *kwds) {
+  static char *kwlist[] = { "sh", "color", NULL };
+  PyObject *sh_o = Py_None;
+  PyObject *color_o = Py_None;
+  PyObject *list;
+  igraph_bliss_sh_t sh = IGRAPH_BLISS_FM;
+  igraph_vector_ptr_t generators;
+  igraph_vector_int_t *color = 0;
+  int retval;
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "|OO", kwlist, &sh_o, &color_o))
+    return NULL;
+
+  if (igraphmodule_PyObject_to_bliss_sh_t(sh_o, &sh))
+	return NULL;
+
+  if (igraph_vector_ptr_init(&generators, 0)) {
+	igraphmodule_handle_igraph_error();
+	return NULL;
+  }
+  IGRAPH_VECTOR_PTR_SET_ITEM_DESTRUCTOR(&generators, igraph_vector_destroy);
+
+  if (igraphmodule_attrib_to_vector_int_t(color_o, self, &color,
+	  ATTRIBUTE_TYPE_VERTEX)) return NULL;
+
+  retval = igraph_automorphism_group(&self->g, color, &generators, sh, 0);
+
+  if (color) { igraph_vector_int_destroy(color); free(color); }
+
+  if (retval) {
+	igraphmodule_handle_igraph_error();
+    igraph_vector_ptr_destroy_all(&generators);
+	return NULL;
+  }
+
+  list = igraphmodule_vector_ptr_t_to_PyList(&generators, IGRAPHMODULE_TYPE_INT);
+  igraph_vector_ptr_destroy_all(&generators);
+
+  return list;
+}
+
 /** \ingroup python_interface_graph
  * \brief Calculates the isomorphy class of a graph or its subgraph
  * \sa igraph_isoclass, igraph_isoclass_subgraph
@@ -14849,6 +14896,33 @@ struct PyMethodDef igraphmodule_Graph_methods[] = {
    "@return: a permutation vector containing vertex IDs. Vertex 0 in the original\n"
    "  graph will be mapped to an ID contained in the first element of this\n"
    "  vector; vertex 1 will be mapped to the second and so on.\n"
+  },
+  {"automorphism_group",
+   (PyCFunction) igraphmodule_Graph_automorphism_group,
+   METH_VARARGS | METH_KEYWORDS,
+   "automorphism_group(sh=\"fm\")\n\n"
+   "Calculates the automorphism group of a graph using BLISS isomorphism\n"
+   "algorithm.\n\n"
+   "Passing the permutation returned here to L{Graph.permute_vertices()} will\n"
+   "transform the graph into its canonical form.\n\n"
+   "See U{http://www.tcs.hut.fi/Software/bliss/index.html} for more information\n"
+   "about the BLISS algorithm and canonical permutations.\n\n"
+   "@param sh: splitting heuristics for graph as a case-insensitive string,\n"
+   "  with the following possible values:\n\n"
+   "    - C{\"f\"}: first non-singleton cell\n\n"
+   "    - C{\"fl\"}: first largest non-singleton cell\n\n"
+   "    - C{\"fs\"}: first smallest non-singleton cell\n\n"
+   "    - C{\"fm\"}: first maximally non-trivially connected non-singleton\n"
+   "      cell\n\n"
+   "    - C{\"flm\"}: largest maximally non-trivially connected\n"
+   "      non-singleton cell\n\n"
+   "    - C{\"fsm\"}: smallest maximally non-trivially connected\n"
+   "      non-singleton cell\n\n"
+   "@param color: optional vector storing a coloring of the vertices\n "
+   "with respect to which the isomorphism is computed."
+   "If C{None}, all vertices have the same color.\n"
+   "@return: a list of lists, each item containing a possible mapping of\n"
+   "  the graph vertices to itself according to the automorphism.\n"
   },
   {"isoclass", (PyCFunction) igraphmodule_Graph_isoclass,
    METH_VARARGS | METH_KEYWORDS,
